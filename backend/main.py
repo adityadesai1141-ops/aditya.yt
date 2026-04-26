@@ -11,6 +11,9 @@ Endpoints:
   GET  /health            → health check
 """
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os   
 import asyncio
 import os
 import uuid
@@ -53,12 +56,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+@app.get("/")
+async def read_index():
+    return FileResponse(os.path.join(frontend_path, "index.html"))
 # ─── In-memory job store ──────────────────────────────────────
 # { job_id: { "status": str, "progress": int, "error": str|None,
 #             "video_path": str|None, "scenes": list } }
 jobs: dict[str, dict] = {}
-
 
 # ─── Request / Response models ────────────────────────────────
 
