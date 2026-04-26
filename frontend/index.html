@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoryReel — AI Video Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0a0c;
+    --surface:   #111116;
+    --border:    #1e1e28;
+    --border-hi: #2e2e40;
+    --text:      #e8e6f0;
+    --muted:     #6b6880;
+    --accent:    #c084fc;
+    --accent2:   #818cf8;
+    --danger:    #f87171;
+    --success:   #34d399;
+    --glow:      rgba(192, 132, 252, 0.15);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 16px;
+    line-height: 1.6;
+    font-weight: 300;
+  }
+
+  /* ── Noise grain overlay ─────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ── Layout ──────────────────────────────── */
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 60px 24px 120px;
+  }
+
+  /* ── Header ──────────────────────────────── */
+  header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+
+  .logo-icon svg { width: 20px; height: 20px; }
+
+  .logo-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+
+  h1 em {
+    font-style: italic;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .tagline {
+    color: var(--muted);
+    font-size: 17px;
+    font-weight: 300;
+  }
+
+  /* ── Card ────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px;
+    margin-bottom: 24px;
+    transition: border-color 0.2s;
+  }
+  .card:focus-within { border-color: var(--border-hi); }
+
+  /* ── Textarea ────────────────────────────── */
+  .field-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+
+  #char-count { font-weight: 300; }
+
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: vertical;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 300;
+    line-height: 1.75;
+    caret-color: var(--accent);
+  }
+
+  textarea::placeholder { color: var(--muted); opacity: 0.6; }
+
+  /* ── Options row ─────────────────────────── */
+  .options-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .option-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+
+  .option-label {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  select {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6880' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+  select:focus { border-color: var(--border-hi); }
+  select option { background: #1a1a22; }
+
+  /* ── Generate button ─────────────────────── */
+  .btn-primary {
+    width: 100%;
+    padding: 18px 32px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    border: none;
+    border-radius: 14px;
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.08);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .btn-primary:hover::after { opacity: 1; }
+  .btn-primary:active { transform: scale(0.99); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+  /* ── Progress section ────────────────────── */
+  #progress-section { display: none; }
+  #progress-section.visible { display: block; }
+
+  .progress-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px;
+    margin-bottom: 24px;
+  }
+
+  .progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .progress-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    font-weight: 400;
+  }
+
+  .progress-pct {
+    font-size: 28px;
+    font-family: 'DM Serif Display', serif;
+    font-weight: 400;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .progress-bar-track {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 999px;
+    transition: width 0.6s ease;
+    width: 0%;
+    box-shadow: 0 0 10px var(--glow);
+  }
+
+  .progress-step {
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 300;
+  }
+
+  /* ── Stage timeline ──────────────────────── */
+  .stages {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 28px;
+  }
+
+  .stage {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 14px;
+    color: var(--muted);
+    transition: color 0.3s;
+  }
+
+  .stage.done   { color: var(--success); }
+  .stage.active { color: var(--text); }
+  .stage.error  { color: var(--danger); }
+
+  .stage-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-hi);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .stage.done   .stage-dot { background: var(--success); }
+  .stage.active .stage-dot {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .stage.error  .stage-dot { background: var(--danger); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+
+  /* ── Result section ──────────────────────── */
+  #result-section { display: none; }
+  #result-section.visible { display: block; }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .video-preview-wrapper {
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+  }
+
+  video {
+    max-width: 100%;
+    max-height: 420px;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+
+  .result-actions {
+    padding: 24px 28px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .btn-secondary {
+    flex: 1;
+    min-width: 120px;
+    padding: 14px 20px;
+    background: transparent;
+    border: 1px solid var(--border-hi);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-decoration: none;
+  }
+  .btn-secondary:hover {
+    background: var(--border);
+    border-color: var(--border-hi);
+  }
+
+  .btn-youtube {
+    flex: 2;
+    background: #ff0000;
+    border-color: #ff0000;
+    color: #fff;
+  }
+  .btn-youtube:hover { background: #cc0000; border-color: #cc0000; }
+
+  /* ── YouTube modal ───────────────────────── */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 100;
+    place-items: center;
+  }
+  .modal-backdrop.open { display: grid; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border-hi);
+    border-radius: 20px;
+    padding: 36px;
+    max-width: 460px;
+    width: calc(100% - 48px);
+  }
+
+  .modal h2 {
+    font-family: 'DM Serif Display', serif;
+    font-weight: 400;
+    font-size: 22px;
+    margin-bottom: 8px;
+  }
+
+  .modal p {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+
+  .privacy-options {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .privacy-opt {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    text-align: center;
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    color: var(--muted);
+  }
+  .privacy-opt.selected {
+    border-color: var(--accent);
+    background: rgba(192,132,252,0.08);
+    color: var(--text);
+  }
+
+  .modal-btns { display: flex; gap: 12px; }
+  .btn-cancel {
+    flex: 1;
+    padding: 14px;
+    background: transparent;
+    border: 1px solid var(--border-hi);
+    border-radius: 10px;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-confirm {
+    flex: 2;
+    padding: 14px;
+    background: #ff0000;
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Error alert ─────────────────────────── */
+  .alert-error {
+    display: none;
+    background: rgba(248, 113, 113, 0.08);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 12px;
+    padding: 16px 20px;
+    color: var(--danger);
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+  .alert-error.visible { display: block; }
+
+  /* ── How it works ────────────────────────── */
+  .how-it-works {
+    margin-top: 48px;
+    padding-top: 48px;
+    border-top: 1px solid var(--border);
+  }
+
+  .how-it-works h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    font-weight: 400;
+    margin-bottom: 24px;
+    color: var(--muted);
+  }
+
+  .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+  }
+
+  .step-item {
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+
+  .step-num {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    font-weight: 400;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .step-item p { font-size: 13px; color: var(--muted); font-weight: 300; }
+
+  /* ── Success state ───────────────────────── */
+  .yt-success {
+    display: none;
+    margin-top: 16px;
+    padding: 16px 20px;
+    background: rgba(52, 211, 153, 0.08);
+    border: 1px solid rgba(52, 211, 153, 0.25);
+    border-radius: 12px;
+    font-size: 14px;
+    color: var(--success);
+  }
+  .yt-success.visible { display: flex; align-items: center; gap: 10px; }
+  .yt-success a { color: var(--success); }
+
+  @media (max-width: 560px) {
+    .options-row { grid-template-columns: 1fr; }
+    .card, .progress-card, .result-card { padding: 24px; }
+    .result-actions { flex-direction: column; }
+    .btn-youtube { order: -1; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+      </div>
+      <span class="logo-name">StoryReel</span>
+    </div>
+    <h1>Turn any story into a<br><em>cinematic video</em></h1>
+    <p class="tagline">Paste your story. AI generates voiceover, visuals &amp; music — fully automated.</p>
+  </header>
+
+  <!-- Input card -->
+  <div class="card">
+    <div class="field-label">
+      <span>Your story</span>
+      <span id="char-count">0 / 10,000</span>
+    </div>
+    <textarea
+      id="story-input"
+      placeholder="Paste your story here... Reddit posts, horror stories, life experiences, fictional tales — anything works. The longer and more vivid, the better the video."
+      maxlength="10000"
+    ></textarea>
+  </div>
+
+  <!-- Options -->
+  <div class="options-row">
+    <div class="option-card">
+      <label class="option-label" for="voice-select">Voice style</label>
+      <select id="voice-select">
+        <option value="calm">Calm narrator</option>
+        <option value="dramatic">Dramatic</option>
+        <option value="whisper">Whisper / ASMR</option>
+        <option value="newscast">Newscast</option>
+      </select>
+    </div>
+    <div class="option-card">
+      <label class="option-label" for="style-select">Visual style</label>
+      <select id="style-select">
+        <option value="cinematic">Cinematic / dark</option>
+        <option value="anime">Anime / illustrated</option>
+        <option value="realistic">Hyper realistic</option>
+        <option value="painting">Oil painting</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="alert-error" id="error-alert"></div>
+
+  <!-- Generate button -->
+  <button class="btn-primary" id="generate-btn" onclick="startGeneration()">
+    ✦ Generate Video
+  </button>
+
+  <!-- Progress -->
+  <div id="progress-section">
+    <div class="progress-card">
+      <div class="progress-header">
+        <span class="progress-title">Generating your video</span>
+        <span class="progress-pct" id="pct-label">0%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-step" id="step-label">Starting pipeline...</div>
+
+      <div class="stages" id="stages-list">
+        <div class="stage" id="stage-split">
+          <div class="stage-dot"></div>
+          Splitting story into scenes
+        </div>
+        <div class="stage" id="stage-assets">
+          <div class="stage-dot"></div>
+          Generating voiceover, visuals &amp; music
+        </div>
+        <div class="stage" id="stage-render">
+          <div class="stage-dot"></div>
+          Rendering scene clips (Ken Burns + subtitles)
+        </div>
+        <div class="stage" id="stage-concat">
+          <div class="stage-dot"></div>
+          Concatenating scenes with crossfade
+        </div>
+        <div class="stage" id="stage-mix">
+          <div class="stage-dot"></div>
+          Mixing background music
+        </div>
+        <div class="stage" id="stage-export">
+          <div class="stage-dot"></div>
+          Exporting final MP4
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section">
+    <div class="result-card">
+      <div class="video-preview-wrapper">
+        <video id="video-player" controls playsinline></video>
+      </div>
+      <div class="result-actions">
+        <a class="btn-secondary" id="download-btn" href="#" download="story_video.mp4">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download MP4
+        </a>
+        <button class="btn-secondary btn-youtube" onclick="openYouTubeModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>
+          Upload to YouTube
+        </button>
+      </div>
+    </div>
+
+    <div class="yt-success" id="yt-success">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      <span>Uploaded! <a id="yt-link" href="#" target="_blank">Watch on YouTube →</a></span>
+    </div>
+
+    <button class="btn-primary" onclick="resetForm()" style="margin-top:12px; background: transparent; border: 1px solid var(--border-hi); color: var(--muted);">
+      ↩ Start a new video
+    </button>
+  </div>
+
+  <!-- How it works -->
+  <div class="how-it-works">
+    <h3>How it works</h3>
+    <div class="steps-grid">
+      <div class="step-item">
+        <div class="step-num">01</div>
+        <p>GPT-4o splits your story into cinematic scenes</p>
+      </div>
+      <div class="step-item">
+        <div class="step-num">02</div>
+        <p>ElevenLabs voices each scene with a natural narrator</p>
+      </div>
+      <div class="step-item">
+        <div class="step-num">03</div>
+        <p>DALL·E 3 generates a dramatic image for every scene</p>
+      </div>
+      <div class="step-item">
+        <div class="step-num">04</div>
+        <p>FFmpeg adds Ken Burns motion, word subtitles &amp; music mix</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- YouTube upload modal -->
+<div class="modal-backdrop" id="yt-modal">
+  <div class="modal">
+    <h2>Upload to YouTube</h2>
+    <p>Your video will be uploaded with an auto-generated title and description. You can edit these in YouTube Studio after.</p>
+    <div class="privacy-options">
+      <div class="privacy-opt selected" onclick="selectPrivacy('private', this)">🔒 Private</div>
+      <div class="privacy-opt" onclick="selectPrivacy('unlisted', this)">🔗 Unlisted</div>
+      <div class="privacy-opt" onclick="selectPrivacy('public', this)">🌍 Public</div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeYouTubeModal()">Cancel</button>
+      <button class="btn-confirm" id="confirm-upload-btn" onclick="confirmUpload()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>
+        Upload Now
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:8000';
+  let currentJobId = null;
+  let selectedPrivacy = 'private';
+
+  // ── Character counter ─────────────────────
+  document.getElementById('story-input').addEventListener('input', function() {
+    document.getElementById('char-count').textContent =
+      `${this.value.length.toLocaleString()} / 10,000`;
+  });
+
+  // ── Stage progress map ─────────────────────
+  const STAGE_MAP = [
+    { id: 'stage-split',  threshold: 5 },
+    { id: 'stage-assets', threshold: 10 },
+    { id: 'stage-render', threshold: 15 },
+    { id: 'stage-concat', threshold: 75 },
+    { id: 'stage-mix',    threshold: 85 },
+    { id: 'stage-export', threshold: 92 },
+  ];
+
+  function updateStages(pct) {
+    STAGE_MAP.forEach((s, i) => {
+      const el = document.getElementById(s.id);
+      const nextThreshold = STAGE_MAP[i + 1]?.threshold ?? 101;
+      el.className = 'stage' + (
+        pct >= nextThreshold ? ' done' :
+        pct >= s.threshold   ? ' active' : ''
+      );
+    });
+  }
+
+  // ── Generation ────────────────────────────
+  async function startGeneration() {
+    const story = document.getElementById('story-input').value.trim();
+    if (story.length < 50) {
+      showError('Please enter at least 50 characters of story text.');
+      return;
+    }
+
+    hideError();
+    document.getElementById('generate-btn').disabled = true;
+    document.getElementById('progress-section').classList.add('visible');
+    document.getElementById('result-section').classList.remove('visible');
+
+    try {
+      const res = await fetch(`${API}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ story }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      const { job_id } = await res.json();
+      currentJobId = job_id;
+      listenForProgress(job_id);
+    } catch (err) {
+      showError(`Failed to start generation: ${err.message}`);
+      resetUI();
+    }
+  }
+
+  function listenForProgress(jobId) {
+    const source = new EventSource(`${API}/status/${jobId}`);
+
+    source.onmessage = (event) => {
+      const { step, progress, error } = JSON.parse(event.data);
+
+      document.getElementById('progress-fill').style.width = `${progress}%`;
+      document.getElementById('pct-label').textContent = `${progress}%`;
+      document.getElementById('step-label').textContent = step;
+      updateStages(progress);
+
+      if (step === 'complete') {
+        source.close();
+        onComplete(jobId);
+      } else if (step === 'error') {
+        source.close();
+        showError(`Pipeline error: ${error}`);
+        resetUI();
+      }
+    };
+
+    source.onerror = () => {
+      source.close();
+      showError('Lost connection to server. Please try again.');
+      resetUI();
+    };
+  }
+
+  function onComplete(jobId) {
+    const downloadUrl = `${API}/download/${jobId}`;
+    document.getElementById('download-btn').href = downloadUrl;
+    document.getElementById('video-player').src = downloadUrl;
+    document.getElementById('progress-section').classList.remove('visible');
+    document.getElementById('result-section').classList.add('visible');
+  }
+
+  // ── YouTube upload ────────────────────────
+  function openYouTubeModal() {
+    document.getElementById('yt-modal').classList.add('open');
+  }
+  function closeYouTubeModal() {
+    document.getElementById('yt-modal').classList.remove('open');
+  }
+  function selectPrivacy(value, el) {
+    selectedPrivacy = value;
+    document.querySelectorAll('.privacy-opt').forEach(o => o.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  async function confirmUpload() {
+    const btn = document.getElementById('confirm-upload-btn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading...';
+
+    try {
+      const res = await fetch(`${API}/upload/${currentJobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacy: selectedPrivacy }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { url } = await res.json();
+
+      closeYouTubeModal();
+      const successEl = document.getElementById('yt-success');
+      document.getElementById('yt-link').href = url;
+      successEl.classList.add('visible');
+    } catch (err) {
+      alert(`Upload failed: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg> Upload Now`;
+    }
+  }
+
+  // ── Utilities ─────────────────────────────
+  function showError(msg) {
+    const el = document.getElementById('error-alert');
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+  function hideError() {
+    document.getElementById('error-alert').classList.remove('visible');
+  }
+  function resetUI() {
+    document.getElementById('generate-btn').disabled = false;
+  }
+  function resetForm() {
+    currentJobId = null;
+    document.getElementById('story-input').value = '';
+    document.getElementById('char-count').textContent = '0 / 10,000';
+    document.getElementById('progress-section').classList.remove('visible');
+    document.getElementById('result-section').classList.remove('visible');
+    document.getElementById('yt-success').classList.remove('visible');
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('pct-label').textContent = '0%';
+    document.getElementById('step-label').textContent = 'Starting pipeline...';
+    document.querySelectorAll('.stage').forEach(s => s.className = 'stage');
+    resetUI();
+    hideError();
+  }
+</script>
+</body>
+</html>
